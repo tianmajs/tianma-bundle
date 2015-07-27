@@ -1,11 +1,8 @@
 {
 	"name": "tianma-bundle",
 	"description": "",
-	"version": "1.0.0-b1",
+	"version": "1.0.0-b2",
 	"license": "MIT",
-	"dependencies": {
-		"libc": "~0.9.1"
-	},
 	"engines": {
 		"node": ">=0.12.0"
 	},

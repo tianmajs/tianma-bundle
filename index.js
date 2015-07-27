@@ -1,10 +1,10 @@
 'use strict';
 
-var libc = require('libc');
 var util = require('util');
 
 var	PATTTEN_IMPORT_FORMAL = /@import\s+url\s*\(\s*(['"]?)([^'"]+?)\1\s*\);/g;
 var	PATTTEN_IMPORT_SIMPLE = /@import\s+(['"])([^'"]+?)\1\s*;/g;
+
 var TEMPLATE_AMD = [
 	'define("%s", [ %s ], %s);'
 ].join('\n');
@@ -44,16 +44,15 @@ function parseCSS(code, id) {
 	} ];
 }
 
+/**
+ * Travel the dependencies tree.
+ */
 function* travel(nodes, reader, queue, visited) {
-	var i = 0,
-		len = nodes.length,
-		node;
-
 	queue = queue || [];
 	visited = visited || {};
 
-	for (; i < len; ++i) {
-		node = nodes[i];
+	for (let i = 0, len = nodes.length; i < len; ++i) {
+		let node = nodes[i];
 
 		if (visited[node]) {
 			continue;
@@ -66,25 +65,34 @@ function* travel(nodes, reader, queue, visited) {
 		queue.push(node.id);
 	}
 	
-	return [ queue, visited ];
+	return {
+		queue: queue,
+		visited: visited
+	};
 }
 
-module.exports = function (mode) {
-	mode = mode || 'simple';
-
+/**
+ * Filter factory.
+ * @return {Function}
+ */
+module.exports = function () {
 	return function* (next) {
-		var req = this.request,
-			res = this.response,
-			base = req.base || '';
-			cache = {};
+		var req = this.request;
+		var res = this.response;
+		var base = req.base || '';
+		var cache = {};
 		
 		yield next;
 		
-		function* read(pathname) {
+		function *read(pathname) {
 			if (!cache[pathname]) {
 				req.url(('/' + pathname).replace(base, ''));
 				
 				yield next;
+
+				if (res.status() !== 200) {
+					throw new Error('Cannot read ' + pathname);
+				}
 				
 				switch (res.is('js', 'css')) {
 				case 'js':
@@ -93,52 +101,38 @@ module.exports = function (mode) {
 				case 'css':
 					cache[pathname] = parseCSS(String(res.data()), pathname)[0];
 					break;
+				default:
+					throw new Error('Not a JS or CSS module (' + pathname + ')');
 				}
 			}
 
 			return cache[pathname];
 		}
-		
-		switch (res.is('js', 'css')) {
-		case 'js':
-			var modules = parseJS(String(res.data())),
-				queue,
-				cache;
-				
-			queue = modules.map(function (module) {
+
+		function *bundle(modules) {
+			var entries = modules.map(function (module) {
 				cache[module.id] = module;
 				return module.id;
 			});
 
-			var ret = yield *travel(queue, read);
-			
-			queue = ret[0];
-			var visited = ret[1];
+			var result = yield *travel(entries, read);
 
-			var data = queue.map(function (id) {
-				return visited[id].code;
-			}).join('\n');
+			res.data(result.queue.map(function (id) {
+				return result.visited[id].code
+			}).join('\n'));
+		}
 
-			if (mode !== 'simple') {
-				data = libc(data, mode);
-			}
-			
-			res.data(data);
+		switch (res.is('js', 'css')) {
+		case 'js':
+			yield *bundle(
+				parseJS(res.data() + '')
+			);
 			break;
 		case 'css':
-			var modules = parseCSS(String(res.data()), req.pathname.substring(1)),
-				queue = modules[0].dependencies;
-	
-			var ret = yield *travel(queue, read);
-			
-			queue = ret[0];
-			var visited = ret[1];
-
-			var data = queue.map(function (id) {
-				return visited[id].code;
-			}).concat(modules[0].code).join('\n');
-			
-			res.data(data);
+			yield *bundle(
+				parseCSS(res.data() + ''),
+				req.pathname.substring(1)
+			);
 			break;
 		}
 	};
