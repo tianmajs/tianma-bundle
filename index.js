@@ -9,6 +9,11 @@ var TEMPLATE_AMD = [
 	'define("%s", [ %s ], %s);'
 ].join('\n');
 
+var MIME = {
+    'js': 'application/javascript',
+    'css': 'text/css'
+};
+
 /**
  * Get module info from JS code.
  * @param code {string}
@@ -98,12 +103,14 @@ module.exports = function () {
 		var base = req.base || '';
         var original = req.path;
 		var cache = {};
+        var type;
 
 		yield next;
 
 		function *read(pathname) {
 			if (!cache[pathname]) {
-				req.url(('/' + pathname).replace(base, ''));
+				req.url(('/' + pathname).replace(base, ''))
+                    .head('accept', MIME[type]);
 
 				yield next;
 
@@ -139,7 +146,7 @@ module.exports = function () {
 			}).join('\n'));
 		}
 
-		switch (res.is('js', 'css')) {
+		switch (type = res.is('js', 'css')) {
 		case 'js':
 			yield *bundle(
 				parseJS(res.data() + '')

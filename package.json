@@ -1,7 +1,7 @@
 {
     "name": "tianma-bundle",
     "description": "JS & CSS module bundler middleware for Tianma",
-    "version": "1.0.0",
+    "version": "1.1.0-b0",
     "author": "Nanqiao Deng <nqdeng@gmail.com>",
     "keywords": [
         "bundle",
